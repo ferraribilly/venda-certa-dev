@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Compra de Produto</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f8f8f8; }
+    .produto { margin-bottom: 20px; }
+    .contador { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+    button { padding: 8px 12px; cursor: pointer; border-radius: 8px; border: 1px solid #ccc; }
+    #qr-code { margin-top: 20px; text-align: center; }
+    #qr-code img { max-width: 300px; height: auto; border: 1px solid #ccc; border-radius: 12px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+  </style>
+</head>
+<body>
+  <h1>Produto</h1>
+  <div class="produto">
+    <p>Nome do Produto: Elite Sprite</p>
+    <p>Preço Unitário: R$ <span id="unit-price">1.00</span></p>
+
+    <div class="contador">
+      <button id="decrease">-</button>
+      <span id="quantity">1</span>
+      <button id="increase">+</button>
+    </div>
+
+    <p>Valor da Compra: R$ <span id="total-price">1.00</span></p>
+    <button id="gerar-pix">Gerar QR Code PIX</button>
+  </div>
+
+  <div id="qr-code"></div>
+
+  <script>
+    const unitPrice = parseFloat(document.getElementById('unit-price').innerText);
+    let quantity = 1;
+
+    const quantityElem = document.getElementById('quantity');
+    const totalPriceElem = document.getElementById('total-price');
+    const qrContainer = document.getElementById('qr-code');
+
+    function updateDisplay() {
+      const total = (unitPrice * quantity);
+      totalPriceElem.innerText = total.toFixed(2);
+    }
+
+    document.getElementById('increase').addEventListener('click', () => {
+      quantity++;
+      quantityElem.innerText = quantity;
+      updateDisplay();
+    });
+
+    document.getElementById('decrease').addEventListener('click', () => {
+      if (quantity > 1) {
+        quantity--;
+        quantityElem.innerText = quantity;
+        updateDisplay();
+      }
+    });
+
+    document.getElementById('gerar-pix').addEventListener('click', async () => {
+      const total = parseFloat((unitPrice * quantity).toFixed(2));
+
+      try {
+        const resp = await fetch('/pix', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            transaction_amount: total,
+            description: `Compra Elite Sprite x${quantity}`,
+            payer_email: ""
+          })
+        });
+
+        const data = await resp.json();
+
+        if (resp.ok && data.qr_url) {
+          qrContainer.innerHTML = `<img src="${data.qr_url}" alt="QR Code PIX">`;
+        } else {
+          const err = data.error || JSON.stringify(data);
+          alert('Erro ao gerar QR Code PIX: ' + err);
+        }
+      } catch (e) {
+        alert('Erro na requisição: ' + e.message);
+      }
+    });
+
+    updateDisplay();
+  </script>
+</body>
+</html>

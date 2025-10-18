@@ -1,48 +1,66 @@
+import os
+import uuid
 import requests
 import qrcode
-import uuid  # Para gerar o X-Idempotency-Key
+import io
+import base64
+from flask import Flask, jsonify, request, send_from_directory
+from dotenv import load_dotenv
 
-# Seu Access Token do Mercado Pago
-ACCESS_TOKEN = "APP_USR-471764041611765-100917-1c88604eefcc1b34c44c540ab8981cbd-692553977" #Nicolas Ferreira Silva
+load_dotenv()
+ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
 
-# Dados do pagamento
-payment_data = {
-    "transaction_amount": 1.00,
-    "description": "Item compra teste producao",
-    "payment_method_id": "pix",
-    "payer": {
-        "email": "Nicolasfreitasferreira5@gmail.com"
+app = Flask(__name__, static_folder="static", template_folder="templates")
+
+@app.route("/")
+def index():
+    return send_from_directory("templates", "index.html")
+
+@app.route("/pix", methods=["POST"])
+def gerar_pix():
+    data_in = request.get_json() or {}
+    transaction_amount = float(data_in.get("transaction_amount", 1.00))
+    description = data_in.get("description", "Item compra teste")
+    payer_email = data_in.get("payer_email", "cliente@exemplo.com")
+
+    payment_data = {
+        "transaction_amount": transaction_amount,
+        "description": description,
+        "payment_method_id": "pix",
+        "payer": {"email": payer_email}
     }
-}
 
-# Cabeçalhos da requisição, incluindo X-Idempotency-Key
-headers = {
-    "Authorization": f"Bearer {ACCESS_TOKEN}",
-    "Content-Type": "application/json",
-    "X-Idempotency-Key": str(uuid.uuid4())  # gera uma chave única a cada requisição
-}
+    headers = {
+        "Authorization": f"Bearer {ACCESS_TOKEN}",
+        "Content-Type": "application/json",
+        "X-Idempotency-Key": str(uuid.uuid4())
+    }
 
-# Endpoint oficial para criar pagamento
-url = "https://api.mercadopago.com/v1/payments"
+    url = "https://api.mercadopago.com/v1/payments"
+    response = requests.post(url, json=payment_data, headers=headers)
 
-# Fazendo a requisição POST
-response = requests.post(url, json=payment_data, headers=headers)
+    if response.status_code in [200, 201]:
+        data = response.json()
+        qr_code_str = data["point_of_interaction"]["transaction_data"]["qr_code"]
 
-if response.status_code in [200, 201]:
-    data = response.json()
-    # Pegando o QR Code do Pix
-    qr_url = data["point_of_interaction"]["transaction_data"]["qr_code"]
+        # gera imagem em memória (não salva no disco)
+        img = qrcode.make(qr_code_str)
+        buffer = io.BytesIO()
+        img.save(buffer, format="PNG")
+        buffer.seek(0)
 
-    # Gerando imagem do QR Code
-    img = qrcode.make(qr_url)
-    img.save("qr_code_pagamento.png")
-    print("QR Code gerado com sucesso!")
-    print("QR URL:", qr_url)
+        # converte pra base64 pra mandar pro navegador
+        img_base64 = base64.b64encode(buffer.read()).decode("utf-8")
+        img_data_url = f"data:image/png;base64,{img_base64}"
 
-    # Salvando o Pix Copia e Cola em arquivo
-    with open("pix.txt", "w") as f:
-        f.write(qr_url)
-    print("Pix Copia e Cola salvo em pix.txt ✅")
-else:
-    print(f"Erro ao criar QR Code: {response.status_code} - {response.text}")
+        return jsonify({
+            "message": "QR Code gerado com sucesso!",
+            "qr_url": img_data_url
+        }), 201
+    else:
+        return jsonify({
+            "error": f"Erro ao criar QR Code: {response.status_code} - {response.text}"
+        }), response.status_code
 
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)
