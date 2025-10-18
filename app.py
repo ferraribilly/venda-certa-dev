@@ -12,9 +12,28 @@ ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 
+# Rota da minha loja 
 @app.route("/")
 def index():
     return send_from_directory("templates", "index.html")
+
+
+# Rota Sucesso
+@app.route("/sucesso")
+def success():
+    return send_from_directory("templates", "sucesso.html")
+
+
+# Rota Pendente
+@app.route("/pendente")
+def pending():
+    return send_from_directory("templates", "pendente.html")
+
+
+# Rota da minha loja
+@app.route("/falhou")
+def failure():
+    return send_from_directory("templates", "falhou.html")
 
 @app.route("/pix", methods=["POST"])
 def gerar_pix():
@@ -61,6 +80,33 @@ def gerar_pix():
         return jsonify({
             "error": f"Erro ao criar QR Code: {response.status_code} - {response.text}"
         }), response.status_code
+
+
+
+# Webhook Mercado Pago
+@app.route('/webhook', methods=['GET', 'POST'])
+def webhook_listener():
+    if request.method == 'GET':
+        return jsonify({'status': 'ok'}), 200
+
+    # POST
+    data = request.json
+    print("Webhook recebido:", data)
+
+    # Valide a origem do webhook (opcional, mas recomendado)
+    # Você precisará da assinatura secreta e validar o cabeçalho X-Signature
+    # Para mais informações, consulte a documentação do Mercado Pago.
+
+    # Processar os dados da notificação
+    if 'type' in data and data['type'] == 'payment':
+        if 'data' in data and 'id' in data['data']:
+            payment_id = data['data']['id']
+            print(f"Detalhes do pagamento: {payment_id}")
+            # Adicione sua lógica aqui para processar o pagamento
+
+    return jsonify({'status': 'success'}), 200
+
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
